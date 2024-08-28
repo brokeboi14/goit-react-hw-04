@@ -1,61 +1,111 @@
-import ContactForm from "./components/ContactForm/ContactForm";
-import SearchBox from "./components/SearchBox/SearchBox";
-import ContactList from "./components/ContactList/ContactList";
-import { useState, useEffect } from "react";
-import "./App.css";
+import ErrorMessage from './components/ErrorMessage/ErrorMessage';
+import SearchBar from './components/SearchBar/SearcBar';
+import Loader from './components/Loader/Loader';
+import LoadMoreBtn from './components/LoadMoreBtn/LoadMoreBtn';
+import ImageGallery from './components/ImageGallery/ImageGallery';
+import ImageModal from './components/ImageModal/ImageModal';
+import toast from 'react-hot-toast';
+import getImages from './js/images-api'
 
-const App = () => {
-  const initialContactList = [
-    { id: "id-1", name: "Rosie Simpson", number: "459-12-56" },
-    { id: "id-2", name: "Hermione Kline", number: "443-89-12" },
-    { id: "id-3", name: "Eden Clements", number: "645-17-79" },
-    { id: "id-4", name: "Annie Copeland", number: "227-91-26" },
-  ];
+import { useState, useEffect, useRef } from 'react';
 
-  const getContactListFromLS = () => {
-    const savedContactList = window.localStorage.getItem("saved-contact-list");
-    return savedContactList !== null
-      ? JSON.parse(savedContactList)
-      : initialContactList;
+import './App.css';
+
+function App() {
+  const MODAL_INITIAL_STATE = {
+    modalIsOpen: false,
+    srcUrl: '',
+    altDescription: '',
+    authorName: '',
+    likes: '',
+    largeDescription: '',
   };
 
-  const [contactList, setContactList] = useState(getContactListFromLS);
-  const [filterContacts, setFilterContacts] = useState("");
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [images, setImages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [showLoadMoreBtn, setShowLoadMoreBtn] = useState(false);
+  const [modalState, setModalState] = useState(MODAL_INITIAL_STATE);
+  const mainElem = useRef();
+
+  const handleSearch = newQuery => {
+    setQuery(newQuery);
+    setPage(1);
+    setImages([]);
+  };
+
+  const handleLoadMoreBtn = () => {
+    setPage(page + 1);
+  };
+
+  const handleModalOpen = (
+    srcUrl,
+    altDescription,
+    authorName,
+    likes,
+    largeDescription,
+  ) => {
+    setModalState({
+      modalIsOpen: true,
+      srcUrl,
+      altDescription,
+      authorName,
+      likes,
+      largeDescription,
+    });
+  };
+
+  const handleModalClose = () => {
+    setModalState(MODAL_INITIAL_STATE);
+  };
 
   useEffect(() => {
-    window.localStorage.setItem(
-      "saved-contact-list",
-      JSON.stringify(contactList)
-    );
-  }, [contactList]);
+    async function getImagesData() {
+      try {
+        setError(false);
+        if (query === '') {
+          setShowLoadMoreBtn(false);
+          return;
+        }
+        setLoading(true);
+        const data = await getImages(query, page);
+        if (data.total === 0) {
+          setShowLoadMoreBtn(false);
+          toast('There are no results!');
+          return;
+        }
+        setImages(prevImages => [...prevImages, ...data.results]);
+        setShowLoadMoreBtn(data.total_pages !== page);
+      } catch (error) {
+        setError(true);
+      } finally {
+        setLoading(false);
+      }
+    }
+    getImagesData();
+  }, [query, page]);
 
-  const addContact = (newContact) => {
-    setContactList((prevContactList) => {
-      return [...prevContactList, newContact];
-    });
-  };
-
-  const deleteContact = (contactId) => {
-    setContactList((prevContactList) => {
-      return prevContactList.filter((contact) => contact.id !== contactId);
-    });
-  };
-
-  const filteredContacts = contactList.filter((contact) =>
-    contact.name.toLowerCase().includes(filterContacts.toLowerCase().trim())
-  );
+  useEffect(() => {
+    if (page === 1) return;
+    mainElem.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [images, page]);
 
   return (
-    <>
-      <h1 className="main-title">Phonebook</h1>
-      <ContactForm onAddContact={addContact} />
-      <SearchBox value={filterContacts} onFilter={setFilterContacts} />
-      <ContactList
-        contactList={filteredContacts}
-        onDeleteContact={deleteContact}
-      />
-    </>
+    <div ref={mainElem}>
+      <SearchBar onSearch={handleSearch} />
+      {error && <ErrorMessage />}
+      {images.length > 0 && (
+        <ImageGallery images={images} onImageClick={handleModalOpen} />
+      )}
+      {showLoadMoreBtn && !loading && (
+        <LoadMoreBtn onLoadMoreBtn={handleLoadMoreBtn} />
+      )}
+      {loading && <Loader />}
+      <ImageModal onModalClose={handleModalClose} modalState={modalState} />
+    </div>
   );
-};
+}
 
 export default App;
